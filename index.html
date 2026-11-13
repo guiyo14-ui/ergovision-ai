@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#102b46">
+  <title>ErgoVision AI · Prototipo v0.1</title>
+  <style>
+    :root{--navy:#102b46;--blue:#1769aa;--bg:#f3f6fa;--line:#dbe3ec;--muted:#65758a;--green:#16845b;--red:#c24141}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:#172536;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+    header{background:var(--navy);color:white;padding:18px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+    header h1{font-size:20px;margin:0;letter-spacing:.2px} header small{display:block;color:#c7d5e4;margin-top:3px}
+    .tag{font-size:12px;border:1px solid #7892ac;border-radius:20px;padding:6px 10px;white-space:nowrap}
+    main{max-width:1180px;margin:20px auto;padding:0 14px 28px}
+    .toolbar,.panel,.metric{background:white;border:1px solid var(--line);border-radius:14px}
+    .toolbar{padding:14px;display:flex;flex-wrap:wrap;gap:9px;align-items:center;margin-bottom:14px}
+    button,.file-label{border:0;border-radius:9px;padding:11px 14px;font-weight:650;font-size:14px;cursor:pointer;background:var(--blue);color:white}
+    button.secondary,.file-label.secondary{background:#e8eef5;color:var(--navy)}
+    button.danger{background:#fce9e9;color:#9f2828}
+    button:disabled{opacity:.45;cursor:not-allowed}
+    input[type=file]{display:none}
+    .status{margin-left:auto;color:var(--muted);font-size:13px}
+    .layout{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(260px,.8fr);gap:14px}
+    .panel{padding:14px;min-width:0}
+    .panel h2{font-size:16px;margin:0 0 12px;color:var(--navy)}
+    .stage{position:relative;width:100%;aspect-ratio:4/3;background:#101923;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+    #sourceVideo{width:100%;height:100%;object-fit:contain;background:#101923}
+    #overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;pointer-events:none}
+    .placeholder{position:absolute;color:#c6d2df;text-align:center;padding:20px;max-width:330px;line-height:1.5}
+    .hint{font-size:12px;color:var(--muted);line-height:1.5;margin:10px 2px 0}
+    .metrics{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+    .metric{padding:12px}
+    .metric .name{font-size:12px;color:var(--muted)}
+    .metric .value{font-size:23px;font-weight:750;color:var(--navy);margin-top:4px;font-variant-numeric:tabular-nums}
+    .metric .unit{font-size:12px;color:var(--muted)}
+    .confidence{margin-top:14px;padding:12px;background:#f5f8fb;border-radius:10px;font-size:13px;line-height:1.5}
+    .confidence strong{color:var(--navy)}
+    .footer-note{margin-top:14px;padding:12px 14px;background:#fff8e8;border:1px solid #f0dfb5;border-radius:10px;font-size:12px;line-height:1.5;color:#72551a}
+    @media(max-width:760px){header{padding:15px}header h1{font-size:18px}.layout{grid-template-columns:1fr}main{margin:12px auto}.status{width:100%;margin:2px 0 0}.toolbar button,.file-label{flex:1;text-align:center}.stage{aspect-ratio:3/4}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  </style>
+</head>
+<body>
+<header>
+  <div><h1>ErgoVision AI</h1><small>Prototipo de análisis corporal · v0.1</small></div>
+  <span class="tag">Procesamiento local</span>
+</header>
+<main>
+  <section class="toolbar">
+    <button id="startCamera">Activar cámara</button>
+    <button id="stopCamera" class="danger" disabled>Detener cámara</button>
+    <label class="file-label secondary" for="videoFile">Cargar video</label>
+    <input id="videoFile" type="file" accept="video/*">
+    <button id="clearVideo" class="secondary">Limpiar</button>
+    <span id="status" class="status">Preparando motor de detección…</span>
+  </section>
+
+  <section class="layout">
+    <article class="panel">
+      <h2>Captura y seguimiento corporal</h2>
+      <div class="stage" id="stage">
+        <video id="sourceVideo" playsinline muted></video>
+        <canvas id="overlay"></canvas>
+        <div id="placeholder" class="placeholder">Activá la cámara o cargá un video para comenzar el análisis.</div>
+      </div>
+      <p class="hint">Consejo para esta prueba: ubicá la cámara fija, a unos metros de distancia, con el cuerpo completo visible y buena iluminación. Para medir flexiones del tronco, comenzá con una vista lateral.</p>
+    </article>
+
+    <aside class="panel">
+      <h2>Indicadores articulares</h2>
+      <div class="metrics">
+        <div class="metric"><div class="name">Tronco respecto de vertical</div><div class="value" id="trunk">—</div><div class="unit">grados · estimación 2D</div></div>
+        <div class="metric"><div class="name">Cadera izquierda</div><div class="value" id="hipL">—</div><div class="unit">grados</div></div>
+        <div class="metric"><div class="name">Rodilla izquierda</div><div class="value" id="kneeL">—</div><div class="unit">grados</div></div>
+        <div class="metric"><div class="name">Rodilla derecha</div><div class="value" id="kneeR">—</div><div class="unit">grados</div></div>
+        <div class="metric"><div class="name">Codo izquierdo</div><div class="value" id="elbowL">—</div><div class="unit">grados</div></div>
+        <div class="metric"><div class="name">Codo derecho</div><div class="value" id="elbowR">—</div><div class="unit">grados</div></div>
+      </div>
+      <div class="confidence"><strong>Detección:</strong> <span id="detection">Esperando imagen…</span><br><strong>Puntos visibles:</strong> <span id="visiblePoints">—</span> / 33</div>
+      <div class="footer-note"><strong>Importante:</strong> estos ángulos se calculan sobre la imagen 2D y dependen de la posición de la cámara. No son mediciones clínicas ni un diagnóstico de riesgo. La estimación del tronco usa hombros y caderas como referencias aproximadas.<br><br><strong>Privacidad:</strong> el video se procesa en este dispositivo y no se envía a Google. MediaPipe puede transmitir métricas técnicas de uso. La biblioteca y el modelo se descargan desde Internet al iniciar.</div>
+    </aside>
+  </section>
+</main>
+
+<script type="module">
+  import { FilesetResolver, PoseLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.2/vision_bundle.mjs";
+
+  const MODEL_URL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+  const WASM_URL = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.2.2/wasm";
+  const video = document.getElementById("sourceVideo");
+  const canvas = document.getElementById("overlay");
+  const ctx = canvas.getContext("2d");
+  const statusEl = document.getElementById("status");
+  const placeholder = document.getElementById("placeholder");
+  const $ = id => document.getElementById(id);
+  let landmarker = null;
+  let cameraStream = null;
+  let currentObjectUrl = null;
+  let animationId = null;
+  let lastVideoTime = -1;
+  let mode = "none";
+  let lastTimestamp = 0;
+
+  // Conexiones principales del esqueleto (índices del modelo Pose Landmarker).
+  const connections = [
+    [11,12],[11,13],[13,15],[12,14],[14,16],
+    [11,23],[12,24],[23,24],
+    [23,25],[25,27],[27,29],[29,31],[27,31],
+    [24,26],[26,28],[28,30],[30,32],[28,32],
+  ].filter(([a,b]) => Number.isInteger(a) && Number.isInteger(b));
+
+  function setStatus(text){ statusEl.textContent = text; }
+  function releaseObjectUrl(){
+    if(currentObjectUrl){ URL.revokeObjectURL(currentObjectUrl); currentObjectUrl=null; }
+  }
+  function stopCameraTracks(){
+    if(cameraStream){ cameraStream.getTracks().forEach(track=>track.stop()); cameraStream=null; }
+  }
+  function resetMetrics(){ ["trunk","hipL","kneeL","kneeR","elbowL","elbowR"].forEach(id => $(id).textContent = "—"); $("detection").textContent="Esperando imagen…"; $("visiblePoints").textContent="—"; }
+  function angle(a,b,c,w,h){
+    if(!a||!b||!c) return null;
+    const ax=a.x*w, ay=a.y*h, bx=b.x*w, by=b.y*h, cx=c.x*w, cy=c.y*h;
+    const v1x=ax-bx, v1y=ay-by, v2x=cx-bx, v2y=cy-by;
+    const d=v1x*v2x+v1y*v2y;
+    const m1=Math.hypot(v1x,v1y), m2=Math.hypot(v2x,v2y);
+    if(!m1||!m2) return null;
+    return Math.acos(Math.max(-1,Math.min(1,d/(m1*m2))))*180/Math.PI;
+  }
+  function midpoint(a,b){ return {x:(a.x+b.x)/2,y:(a.y+b.y)/2}; }
+  function trunkAngle(lm,w,h){
+    const shoulder=midpoint(lm[11],lm[12]), hip=midpoint(lm[23],lm[24]);
+    const dx=(shoulder.x-hip.x)*w, dy=(shoulder.y-hip.y)*h;
+    return Math.atan2(Math.abs(dx),Math.abs(dy))*180/Math.PI;
+  }
+  function good(lm, ids){ return ids.every(i => lm[i] && (lm[i].visibility ?? 1) > 0.5); }
+  function showAngle(id,value){ $(id).textContent = value==null || !Number.isFinite(value) ? "—" : `${Math.round(value)}°`; }
+
+  function drawPose(lm,w,h){
+    canvas.width=w; canvas.height=h;
+    ctx.clearRect(0,0,w,h);
+    ctx.lineWidth=Math.max(3,w/240);
+    ctx.strokeStyle="#31e6a0";
+    ctx.fillStyle="#ffcf4a";
+    for(const [a,b] of connections){
+      if(!lm[a]||!lm[b]||(lm[a].visibility??1)<.35||(lm[b].visibility??1)<.35) continue;
+      ctx.beginPath(); ctx.moveTo(lm[a].x*w,lm[a].y*h); ctx.lineTo(lm[b].x*w,lm[b].y*h); ctx.stroke();
+    }
+    for(const p of lm){
+      if((p.visibility??1)<.35) continue;
+      ctx.beginPath(); ctx.arc(p.x*w,p.y*h,Math.max(3,w/180),0,Math.PI*2); ctx.fill();
+    }
+  }
+
+  function updateReadings(lm,w,h){
+    const visible=lm.filter(p=>(p.visibility??1)>.5).length;
+    $("visiblePoints").textContent=visible;
+    $("detection").textContent=visible>=20?"Cuerpo detectado":"Detección parcial; mejorá encuadre o iluminación";
+    showAngle("trunk",good(lm,[11,12,23,24])?trunkAngle(lm,w,h):null);
+    showAngle("hipL",good(lm,[11,23,25])?angle(lm[11],lm[23],lm[25],w,h):null);
+    showAngle("kneeL",good(lm,[23,25,27])?angle(lm[23],lm[25],lm[27],w,h):null);
+    showAngle("kneeR",good(lm,[24,26,28])?angle(lm[24],lm[26],lm[28],w,h):null);
+    showAngle("elbowL",good(lm,[11,13,15])?angle(lm[11],lm[13],lm[15],w,h):null);
+    showAngle("elbowR",good(lm,[12,14,16])?angle(lm[12],lm[14],lm[16],w,h):null);
+  }
+
+  function processFrame(){
+    if(!landmarker || video.readyState < 2 || video.videoWidth===0) return;
+    if(video.currentTime === lastVideoTime) return;
+    lastVideoTime=video.currentTime;
+    const now=Math.max(performance.now(),lastTimestamp+1); lastTimestamp=now;
+    try{
+      const result=landmarker.detectForVideo(video,now);
+      const lm=result.landmarks?.[0];
+      if(lm){ drawPose(lm,video.videoWidth,video.videoHeight); updateReadings(lm,video.videoWidth,video.videoHeight); }
+      else { ctx.clearRect(0,0,canvas.width,canvas.height); $("detection").textContent="No se detectó una persona"; $("visiblePoints").textContent="0"; resetMetrics(); }
+    }catch(err){ console.error(err); setStatus("Error al analizar un cuadro"); }
+  }
+  function loop(){ processFrame(); animationId=requestAnimationFrame(loop); }
+  function stopLoop(){ if(animationId) cancelAnimationFrame(animationId); animationId=null; }
+  function startLoop(){ stopLoop(); lastVideoTime=-1; lastTimestamp=0; loop(); }
+
+  async function initModel(){
+    try{
+      setStatus("Cargando modelo de detección…");
+      const vision=await FilesetResolver.forVisionTasks(WASM_URL);
+      landmarker=await PoseLandmarker.createFromOptions(vision,{
+        baseOptions:{modelAssetPath:MODEL_URL,delegate:"CPU"},
+        runningMode:"VIDEO",numPoses:1,
+        minPoseDetectionConfidence:.5,minPosePresenceConfidence:.5,minTrackingConfidence:.5
+      });
+      setStatus("Motor listo · Procesamiento local");
+    }catch(err){ console.error(err); setStatus("No se pudo cargar el modelo. Revisá tu conexión."); alert("No se pudo cargar MediaPipe. Para iniciar necesitás conexión a Internet la primera vez, porque se descargan la librería y el modelo."); }
+  }
+
+  $("startCamera").addEventListener("click",async()=>{
+    if(!landmarker){setStatus("Esperá a que termine de cargar el modelo");return;}
+    try{
+      if(!window.isSecureContext || !navigator.mediaDevices?.getUserMedia){
+        setStatus("La cámara requiere HTTPS o localhost");
+        alert("Para usar la cámara, abrí ErgoVision desde una dirección HTTPS (por ejemplo GitHub Pages) o localhost.");
+        return;
+      }
+      stopLoop(); stopCameraTracks(); releaseObjectUrl();
+      video.pause(); video.removeAttribute("src"); video.load(); video.srcObject=null;
+      cameraStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280},height:{ideal:720}},audio:false});
+      video.srcObject=cameraStream; video.controls=false; mode="camera"; await video.play();
+      placeholder.hidden=true; $("startCamera").disabled=true; $("stopCamera").disabled=false;
+      setStatus("Cámara activa · análisis en el dispositivo"); startLoop();
+    }catch(err){console.error(err);setStatus("No se pudo acceder a la cámara");alert("No se pudo abrir la cámara. Permití el acceso y abrí esta página desde HTTPS o localhost.");}
+  });
+
+  $("stopCamera").addEventListener("click",()=>{
+    stopLoop(); stopCameraTracks(); releaseObjectUrl();
+    video.pause(); video.removeAttribute("src"); video.load(); video.srcObject=null; mode="none"; canvas.width=1;canvas.height=1;ctx.clearRect(0,0,1,1);
+    $("startCamera").disabled=false;$("stopCamera").disabled=true;placeholder.hidden=false;resetMetrics();setStatus("Cámara detenida");
+  });
+
+  $("videoFile").addEventListener("change",async e=>{
+    const file=e.target.files?.[0]; if(!file)return;
+    if(!file.type.startsWith("video/")){alert("Seleccioná un archivo de video.");return;}
+    if(!landmarker){ setStatus("Esperá a que termine de cargar el motor"); e.target.value=""; return; }
+    stopLoop(); stopCameraTracks(); releaseObjectUrl();
+    video.pause(); video.srcObject=null; currentObjectUrl=URL.createObjectURL(file); video.src=currentObjectUrl; video.controls=true; mode="file";
+    $("startCamera").disabled=false;$("stopCamera").disabled=true;
+    try{await video.play();placeholder.hidden=true;setStatus("Video local en reproducción · análisis activo");startLoop();}
+    catch(err){console.error(err);setStatus("No se pudo reproducir el video");}
+  });
+
+  $("clearVideo").addEventListener("click",()=>{
+    stopLoop(); stopCameraTracks(); releaseObjectUrl();
+    video.pause();video.removeAttribute("src");video.srcObject=null;video.load();video.controls=false;mode="none";
+    canvas.width=1;canvas.height=1;ctx.clearRect(0,0,1,1);placeholder.hidden=false;
+    $("startCamera").disabled=false;$("stopCamera").disabled=true;$("videoFile").value="";resetMetrics();setStatus(landmarker?"Motor listo · Procesamiento local":"Esperando motor");
+  });
+
+  video.addEventListener("loadedmetadata",()=>{ if(video.videoWidth&&video.videoHeight){canvas.width=video.videoWidth;canvas.height=video.videoHeight;} });
+  video.addEventListener("ended",()=>{
+    if(mode==="file"){
+      stopLoop();
+      setStatus("Video finalizado · podés volver a reproducirlo o cargar otro");
+    }
+  });
+  video.addEventListener("error",()=>{
+    if(mode==="file") setStatus("No se pudo leer el video. Probá con MP4 H.264.");
+  });
+  await initModel();
+</script>
+</body>
+</html>
